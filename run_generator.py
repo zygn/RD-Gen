@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import sys
+import logging 
 from logging import getLogger
 from typing import List
 
@@ -19,6 +20,8 @@ from src import (
 )
 
 logger = getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logging.disable(logging.WARNING)
 
 
 def main(config_path, dest_dir):
@@ -79,6 +82,7 @@ def main(config_path, dest_dir):
                 for setter in all_setter:
                     setter.set(dag)
                 # Export DAG.
+
                 dag_exporter.export(dag, combo_dest_dir, f"dag_{i}")
             except BuildFailedError as e:
                 logger.warning(e.message)
@@ -87,7 +91,7 @@ def main(config_path, dest_dir):
 def option_parser():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
-        "-c", "--config_path", required=True, type=str, help="path to config YAML file."
+        "-c", "--config_path", required=False, type=str, help="path to config YAML file.", default="./eval_for_sample.yaml"
     )
     arg_parser.add_argument(
         "-d",
@@ -107,6 +111,7 @@ if __name__ == "__main__":
 
     # Check whether config_path exists.
     if not os.path.isfile(config_path):
+
         logger.error(f"{config_path} not found.")
         sys.exit(1)
 

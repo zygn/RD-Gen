@@ -1,0 +1,64 @@
+Seed: 0
+Number of DAGs: 100
+
+Graph structure:
+  Generation method: "G(n, p)"
+  Number of nodes:
+    # Random: (5, 8, 1)
+    Combination: [5, 6, 7, 8, 9]
+    # Fixed: 9
+  Probability of edge existence:
+    Combination: [0.2, 0.4, 0.6, 0.8]
+  Number of source nodes:
+    Combination: [1, 2, 3]
+  Number of sink nodes:
+    Fixed: 1
+  Ensure weakly connected: True
+
+Properties:
+  Multi-rate:
+    Period:
+      Random: (20, 80, 1)
+    Periodic type: "All"
+    Source node period:
+      Random: (20, 80, 1)
+    Sink node period:
+      Random: (100, 100, 1)
+    Offset:
+      Random: (1, 1, 1)
+    Total utilization:
+      Combination: (0.2, 0.5, 0.1)
+
+  Additional properties:
+    Node properties:
+      Weight:
+        Random: [1]
+    Edge properties:
+      Transfer:
+        Combination: [1] 
+
+Output formats:
+  Naming of combination directory: "Abbreviation"
+  DAG:
+    YAML: False
+    JSON: False
+    XML: False
+    DOT: True
+  Figure:
+    Draw legend: False
+    PNG: True
+    SVG: False
+    EPS: False
+    PDF: False
+  Export constraints:
+    Number of Nodes: True
+    Periods: True
+    Execution Times: True
+    Freshness: True
+    Freshness Multiplier: 2  # V = FM * P
+    Children: True
+    Pathways: True
+    Topological Order: True
+
+
+

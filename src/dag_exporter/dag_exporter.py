@@ -30,6 +30,8 @@ class DAGExporter:
         self._export_dag(dag, dest_dir, file_name)
         if self._config.figure:
             self._export_fig(dag, dest_dir, file_name)
+        if self._config.export_constraints:
+            self._export_constraints(dag, dest_dir, file_name)
 
     def _export_dag(self, dag: nx.DiGraph, dest_dir: str, file_name: str) -> None:
         """Export DAG description file.
@@ -129,3 +131,91 @@ class DAGExporter:
                 && rm {dest_dir}/{file_name}.ps",
                 shell=True,
             )
+
+    def _export_constraints(self, dag: nx.DiGraph, dest_dir: str, file_name: str) -> None:
+        """Export constraints.
+
+        Parameters
+        ----------
+        dag : nx.DiGraph
+            DAG.
+        dest_dir : str
+            Destination directory.
+        file_name : str
+            File name.
+
+        """
+        conf = self._config.export_constraints
+
+        N = len(dag.nodes)
+        periods = [dag.nodes[i]["period"] for i in range(N)]
+        execution_times = [dag.nodes[i]["execution_time"] for i in range(N)]
+        tails = [node for node, out_degree in dag.out_degree() if out_degree == 0]
+
+        child = {}
+
+        for src, tgt in dag.edges:
+            if src not in child:
+                child[src] = []
+
+            child[src].append(tgt)
+
+        topo_sort = list(nx.topological_sort(dag))
+        # topo_all = list(nx.all_topological_sorts(dag))
+
+        V_multiplier = conf.get("Freshness Multiplier", 2)
+        V = [V_multiplier * periods[i] for i in range(N-1)]
+
+
+        buf = []
+        if conf.get("Number of Nodes", False):
+            buf.append(f"{N}")
+        buf.append("")
+        
+        if conf.get("Periods", False):
+            buf.append(" ".join(map(str, periods)))
+        if conf.get("Execution Times", False):
+            buf.append(" ".join(map(str, execution_times)))
+        if conf.get("Freshness", False):
+            buf.append(" ".join(map(str, V)))
+        # if conf.get("Children", False):
+        
+        if conf.get("Children", False):
+            buf.append("")
+            buf.append(f"{len(child)}")
+            for i in child.keys():
+                buf.append(f"{i} {len(child[i])} {' '.join(map(str, child[i]))}")
+
+        if conf.get("Pathways", False):
+            buf.append("")
+            all_pathway = []
+            for head in dag.nodes:
+                for tail in tails:
+                    all_simple_paths = list(nx.all_simple_paths(dag, head, tail))
+                    # last element should be the head
+                    for i in range(len(all_simple_paths)):
+                        all_simple_paths[i][-1] = head
+                        all_simple_paths[i] = list(map(int, all_simple_paths[i]))
+
+                    all_pathway.extend(all_simple_paths)
+
+            for i in all_pathway:
+                if len(i) == 1:
+                    all_pathway.remove(i)
+
+            buf.append(f"{len(all_pathway)}")
+            for i in all_pathway:
+                buf.append(f"{' '.join(map(str, i))}")
+            
+        if conf.get("Topological Order", False):
+            buf.append("")
+            buf.append(" ".join(map(str, topo_sort)))
+
+        with open(f"{dest_dir}/{file_name}.txt", "w") as f:
+            f.write("\n".join(buf))
+            
+            
+
+
+        
+

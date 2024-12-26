@@ -414,3 +414,9 @@ class Config:
             return self.output_formats["Figure"].get("PDF")
         else:
             return None
+
+    @property
+    def export_constraints(self):
+        return self.output_formats.get("Export constraints")
+
+    
