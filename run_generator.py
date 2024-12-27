@@ -6,6 +6,7 @@ import logging
 from logging import getLogger
 from typing import List
 
+import concurrent.futures
 import yaml  # type: ignore
 from tqdm import tqdm
 
@@ -21,8 +22,7 @@ from src import (
 
 logger = getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-logging.disable(logging.WARNING)
-
+logging.disable(logging.DEBUG)
 
 def main(config_path, dest_dir):
     with open(config_path) as f:
@@ -36,8 +36,9 @@ def main(config_path, dest_dir):
     combo_iter = combo_gen.get_combo_iter()
     num_combo = combo_gen.get_num_combos()
 
-    # Loop for each combination.
-    for dir_name, log, config in tqdm(combo_iter, total=num_combo, desc="Generated combinations"):
+    def really_do(iterable):
+        dir_name, log, config = iterable
+
         combo_dest_dir = f"{dest_dir}/{dir_name}"
         os.mkdir(combo_dest_dir)
         with open(f"{combo_dest_dir}/combination_log.yaml", "w") as f:
@@ -87,6 +88,13 @@ def main(config_path, dest_dir):
             except BuildFailedError as e:
                 logger.warning(e.message)
 
+
+    # Loop for each combination.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        results = list(tqdm(executor.map(really_do, combo_iter), total=num_combo, desc="Generated combinations"))
+
+
+        
 
 def option_parser():
     arg_parser = argparse.ArgumentParser()

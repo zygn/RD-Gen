@@ -49,7 +49,7 @@ class PropertySetterBase(metaclass=ABCMeta):
 
     @staticmethod
     def _output_round_up_warning(round_up_param: str, error_param: str) -> None:
-        logger.warning(
+        logger.debug(
             f"'{round_up_param}' is rounded up to 1 because it is very small."
             f"This rounding up may cause errors in '{error_param}'."
             "To prevent this error, it is recommended to use a smaller unit"
