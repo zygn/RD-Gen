@@ -120,3 +120,67 @@ def test_chain_augment_no_orphan_sources_at_depth_two():
             continue
         if g.nodes[n].get("node_type") == "C_src" and g.in_degree(n) == 0:
             raise AssertionError(f"orphan inner C_src found: {n}")
+
+
+def _gnp_dag(n=8, p=0.3, seed=0):
+    random.seed(seed)
+    g = nx.DiGraph()
+    for i in range(n):
+        g.add_node(i, node_type="regular", execution_time=1)
+    for i in range(n):
+        for j in range(n):
+            if i < j and random.random() < p:
+                g.add_edge(i, j)
+    return g
+
+
+def test_gnp_augment_creates_c_src_c_snk_pairs():
+    random.seed(42)
+    cfg = _chain_config(prob_b=1.0, max_depth=1, max_branches=2)
+    # NOTE: Branching subsection is layout-agnostic; reusing _chain_config
+    cfg.graph_structure["Probability of edge existence"] = 0.3
+    aug = BranchingAugmentor(cfg)
+    g = aug.augment(_gnp_dag(n=6, p=0.5, seed=1), layout_hint="gnp")
+    csrcs = [n for n, a in g.nodes(data=True) if a.get("node_type") == "C_src"]
+    csnks = [n for n, a in g.nodes(data=True) if a.get("node_type") == "C_snk"]
+    assert len(csrcs) >= 1
+    assert len(csrcs) == len(csnks)
+    BranchingValidator.assert_valid(g, "probabilistic")
+
+
+def test_gnp_augment_firing_prob_sums_to_one():
+    random.seed(42)
+    cfg = _chain_config(prob_b=1.0, max_depth=2, max_branches=3)
+    cfg.graph_structure["Probability of edge existence"] = 0.3
+    aug = BranchingAugmentor(cfg)
+    g = aug.augment(_gnp_dag(n=8, p=0.4, seed=2), layout_hint="gnp")
+    for n, a in g.nodes(data=True):
+        if a.get("node_type") != "C_src":
+            continue
+        out_probs = [d["firing_prob"] for _, _, d in g.out_edges(n, data=True)]
+        assert abs(sum(out_probs) - 1.0) < 1e-9
+
+
+def test_gnp_augment_dirichlet_distribution():
+    import numpy as np
+    random.seed(42)
+    np.random.seed(42)  # required because np.random has separate state
+    cfg = _chain_config(prob_b=1.0, max_depth=1, max_branches=3, dist="dirichlet")
+    cfg.graph_structure["Probability of edge existence"] = 0.3
+    aug = BranchingAugmentor(cfg)
+    g = aug.augment(_gnp_dag(n=6, p=0.4, seed=3), layout_hint="gnp")
+    BranchingValidator.assert_valid(g, "probabilistic")
+
+
+def test_gnp_augment_no_orphan_sources_at_depth_two():
+    """Regression: gnp mode at depth>=2 must not produce orphan C_src nodes."""
+    random.seed(42)
+    cfg = _chain_config(prob_b=1.0, max_depth=2, max_branches=3)
+    cfg.graph_structure["Probability of edge existence"] = 0.3
+    aug = BranchingAugmentor(cfg)
+    g = aug.augment(_gnp_dag(n=6, p=0.3, seed=4), layout_hint="gnp")
+    for n in g.nodes():
+        if g.nodes[n].get("node_type") == "C_src":
+            assert g.in_degree(n) >= 1 or n == min(g.nodes()), \
+                f"orphan C_src found: {n}"
+    BranchingValidator.assert_valid(g, "probabilistic")

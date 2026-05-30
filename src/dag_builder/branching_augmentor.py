@@ -122,8 +122,98 @@ class BranchingAugmentor:
     # ---------- gnp mode (Task 4) ----------
 
     def _augment_gnp(self, dag: nx.DiGraph, current_depth: int,
-                     initial_size: int) -> nx.DiGraph:
-        raise NotImplementedError("gnp mode implemented in Task 4")
+                     initial_size: int, candidate_filter=None) -> nx.DiGraph:
+        max_depth = Util.random_choice(self._config.maximum_nesting_depth)
+        if current_depth >= max_depth:
+            return dag
+        p_b = Util.random_choice(self._config.probability_of_branching)
+        max_branches = Util.random_choice(self._config.maximum_branches)
+        depth_remaining = max(0, max_depth - current_depth)
+
+        topo = list(nx.topological_sort(dag))
+        if candidate_filter is not None:
+            candidates = [n for n in topo
+                          if n in candidate_filter
+                          and dag.nodes[n].get("node_type") == "regular"]
+        else:
+            candidates = [n for n in topo
+                          if dag.nodes[n].get("node_type") == "regular"]
+
+        newly_added_at_next_depth = []
+        for v in candidates:
+            if v not in dag.nodes():
+                continue
+            if random.random() >= p_b:
+                continue
+            k = random.randint(2, max(2, max_branches))
+            n_sub = max(2, initial_size // max(1, k * (depth_remaining + 1)))
+            new_subs = self._replace_node_with_gnp_branches(dag, v, k, n_sub)
+            newly_added_at_next_depth.extend(new_subs)
+
+        if newly_added_at_next_depth:
+            self._augment_gnp(dag, current_depth + 1, initial_size,
+                               candidate_filter=set(newly_added_at_next_depth))
+        return dag
+
+    def _replace_node_with_gnp_branches(self, dag: nx.DiGraph, v: int, k: int,
+                                         n_sub: int) -> list:
+        """Replace v with [C_src, sub_DAG_1..k via branch heads, C_snk] in place.
+        Returns the list of newly added regular sub-nodes (branch heads + interior)."""
+        unit_id = self._take_unit_id()
+        csrc = self._take_node_id()
+        csnk = self._take_node_id()
+        dag.add_node(csrc, node_type="C_src", branch_unit_id=unit_id, execution_time=0)
+        dag.add_node(csnk, node_type="C_snk", branch_unit_id=unit_id, execution_time=0)
+        # Preserve in-edge / out-edge attributes
+        in_edges = [(p, dict(dag.edges[p, v])) for p in dag.predecessors(v)]
+        out_edges = [(s, dict(dag.edges[v, s])) for s in dag.successors(v)]
+        dag.remove_node(v)
+        for p, attrs in in_edges:
+            dag.add_edge(p, csrc, **attrs)
+        for s, attrs in out_edges:
+            dag.add_edge(csnk, s, **attrs)
+
+        probs = self._sample_categorical(k)
+        edge_prob = (Util.random_choice(self._config.probability_of_edge_existence)
+                     if self._config.probability_of_edge_existence is not None
+                     else 0.3)
+
+        new_subs = []
+        for j in range(k):
+            # Each branch gets its own internal Erdős-Rényi mini-DAG of n_sub nodes,
+            # plus a "branch head" node that receives the C_src -> head edge with
+            # branch_id/firing_prob attributes (single edge from C_src per branch,
+            # required for clean branch_id semantics).
+            head_id = self._take_node_id()
+            dag.add_node(head_id, node_type="regular", execution_time=0)
+            new_subs.append(head_id)
+
+            sub_node_ids = [self._take_node_id() for _ in range(n_sub)]
+            for n in sub_node_ids:
+                dag.add_node(n, node_type="regular", execution_time=0)
+                new_subs.append(n)
+            for ai in range(n_sub):
+                for bi in range(ai + 1, n_sub):
+                    if random.random() < edge_prob:
+                        dag.add_edge(sub_node_ids[ai], sub_node_ids[bi])
+
+            sub_subgraph = dag.subgraph(sub_node_ids)
+            sources = [n for n in sub_node_ids if sub_subgraph.in_degree(n) == 0]
+            sinks = [n for n in sub_node_ids if sub_subgraph.out_degree(n) == 0]
+            if not sources:
+                sources = [sub_node_ids[0]]
+            if not sinks:
+                sinks = [sub_node_ids[-1]]
+
+            attrs = {"branch_id": j}
+            if self._config.firing == "probabilistic":
+                attrs["firing_prob"] = float(probs[j])
+            dag.add_edge(csrc, head_id, **attrs)
+            for src in sources:
+                dag.add_edge(head_id, src)
+            for sink in sinks:
+                dag.add_edge(sink, csnk)
+        return new_subs
 
     # ---------- common ----------
 
