@@ -65,6 +65,13 @@ def test_branch_id_not_contiguous_is_rejected():
         BranchingValidator.assert_valid(g, "probabilistic")
 
 
+def test_missing_branch_id_is_rejected():
+    g = _make_valid_pdag()
+    del g.edges[1, 2]["branch_id"]
+    with pytest.raises(BranchingConstraintError):
+        BranchingValidator.assert_valid(g, "deterministic")
+
+
 def test_no_branching_dag_passes_trivially():
     """DAG with no C_src/C_snk should be valid in both firing modes."""
     g = nx.DiGraph()

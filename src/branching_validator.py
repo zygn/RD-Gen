@@ -57,7 +57,12 @@ class BranchingValidator:
                 )
             csrc, csnk = srcs[0], snks[0]
             out_edges = list(dag.out_edges(csrc, data=True))
-            branch_ids = sorted(d.get("branch_id") for _, _, d in out_edges)
+            raw_ids = [d.get("branch_id") for _, _, d in out_edges]
+            if any(bid is None for bid in raw_ids):
+                raise BranchingConstraintError(
+                    f"unit {uid}: one or more C_src out-edges missing branch_id"
+                )
+            branch_ids = sorted(raw_ids)
             if branch_ids != list(range(len(out_edges))):
                 raise BranchingConstraintError(
                     f"unit {uid}: branch_id on C_src out-edges must be "
@@ -95,11 +100,7 @@ class BranchingValidator:
     @staticmethod
     def _check_zhao_p_dag(dag: nx.DiGraph) -> None:
         units = BranchingValidator._collect_units(dag)
-        seen_uids: Set[int] = set()
         for uid in units.keys():
-            if uid in seen_uids:
-                raise BranchingConstraintError(f"branch_unit_id {uid} reused")
-            seen_uids.add(uid)
             csrc = units[uid]["C_src"][0]
             total = 0.0
             for _, _, d in dag.out_edges(csrc, data=True):
