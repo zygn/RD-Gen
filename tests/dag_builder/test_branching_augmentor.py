@@ -101,3 +101,22 @@ def test_chain_augment_c_src_c_snk_have_zero_exec_time():
     for n, a in g.nodes(data=True):
         if a.get("node_type") in ("C_src", "C_snk"):
             assert a.get("execution_time") == 0
+
+
+def test_chain_augment_no_orphan_sources_at_depth_two():
+    """Regression: max_depth>=2 must not leave orphan inner C_src nodes
+    (the original merge-back bug created 18 sources where 1 was expected)."""
+    random.seed(42)
+    cfg = _chain_config(prob_b=1.0, max_depth=2, max_branches=3)
+    aug = BranchingAugmentor(cfg)
+    g = aug.augment(_chain_dag(5), layout_hint="chain")
+    sources = [n for n in g.nodes() if g.in_degree(n) == 0]
+    assert len(sources) == 1, f"expected 1 source node, got {len(sources)}: {sources}"
+    # Inner C_src nodes (those that are not the unique DAG source) must have a predecessor.
+    # The single DAG source may legitimately be a C_src when it replaces the chain root.
+    dag_source = sources[0]
+    for n in g.nodes():
+        if n == dag_source:
+            continue
+        if g.nodes[n].get("node_type") == "C_src" and g.in_degree(n) == 0:
+            raise AssertionError(f"orphan inner C_src found: {n}")

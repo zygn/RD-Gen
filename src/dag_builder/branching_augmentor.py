@@ -1,5 +1,5 @@
 import random
-from typing import List, Optional
+from typing import List
 
 import networkx as nx
 import numpy as np
@@ -45,15 +45,24 @@ class BranchingAugmentor:
 
     # ---------- chain mode ----------
 
-    def _augment_chain(self, dag: nx.DiGraph, current_depth: int) -> nx.DiGraph:
+    def _augment_chain(self, dag: nx.DiGraph, current_depth: int,
+                       candidate_filter=None) -> nx.DiGraph:
         max_depth = Util.random_choice(self._config.maximum_nesting_depth)
         if current_depth >= max_depth:
             return dag
         p_b = Util.random_choice(self._config.probability_of_branching)
         max_branches = Util.random_choice(self._config.maximum_branches)
 
-        candidates = [n for n in list(nx.topological_sort(dag))
-                      if dag.nodes[n].get("node_type") == "regular"]
+        topo = list(nx.topological_sort(dag))
+        if candidate_filter is not None:
+            candidates = [n for n in topo
+                          if n in candidate_filter
+                          and dag.nodes[n].get("node_type") == "regular"]
+        else:
+            candidates = [n for n in topo
+                          if dag.nodes[n].get("node_type") == "regular"]
+
+        newly_added_at_next_depth = []
         for v in candidates:
             if v not in dag.nodes():
                 continue
@@ -62,7 +71,12 @@ class BranchingAugmentor:
             k = random.randint(2, max(2, max_branches))
             remaining = self._chain_position_remaining(dag, v)
             L_sub = max(1, remaining)
-            self._replace_node_with_branches(dag, v, k, L_sub, current_depth)
+            new_subs = self._replace_node_with_branches(dag, v, k, L_sub)
+            newly_added_at_next_depth.extend(new_subs)
+
+        if newly_added_at_next_depth:
+            self._augment_chain(dag, current_depth + 1,
+                                 candidate_filter=set(newly_added_at_next_depth))
         return dag
 
     def _chain_position_remaining(self, dag: nx.DiGraph, v: int) -> int:
@@ -74,24 +88,28 @@ class BranchingAugmentor:
             return 1
 
     def _replace_node_with_branches(self, dag: nx.DiGraph, v: int, k: int,
-                                    L_sub: int, current_depth: int) -> None:
+                                    L_sub: int) -> list:
+        """Replace v with [C_src, sub_seq_1..k, C_snk] in place.
+        Returns the list of newly added regular sub-nodes (for next-depth processing)."""
         unit_id = self._take_unit_id()
         csrc = self._take_node_id()
         csnk = self._take_node_id()
         dag.add_node(csrc, node_type="C_src", branch_unit_id=unit_id, execution_time=0)
         dag.add_node(csnk, node_type="C_snk", branch_unit_id=unit_id, execution_time=0)
-        preds = list(dag.predecessors(v))
+        in_edges = [(p, dict(dag.edges[p, v])) for p in dag.predecessors(v)]
         succs = list(dag.successors(v))
         dag.remove_node(v)
-        for p in preds:
-            dag.add_edge(p, csrc)
+        for p, edge_attrs in in_edges:
+            dag.add_edge(p, csrc, **edge_attrs)
         for s in succs:
             dag.add_edge(csnk, s)
         probs = self._sample_categorical(k)
+        new_subs = []
         for j in range(k):
             sub_nodes = [self._take_node_id() for _ in range(L_sub)]
             for n in sub_nodes:
                 dag.add_node(n, node_type="regular", execution_time=0)
+                new_subs.append(n)
             for a, b in zip(sub_nodes[:-1], sub_nodes[1:]):
                 dag.add_edge(a, b)
             attrs = {"branch_id": j}
@@ -99,17 +117,7 @@ class BranchingAugmentor:
                 attrs["firing_prob"] = float(probs[j])
             dag.add_edge(csrc, sub_nodes[0], **attrs)
             dag.add_edge(sub_nodes[-1], csnk)
-            sub_view = dag.subgraph(sub_nodes).copy()
-            self._augment_chain(sub_view, current_depth + 1)
-            # Merge augmented sub_view back into dag (its node ids are unique)
-            for n, attr in sub_view.nodes(data=True):
-                if n not in dag.nodes():
-                    dag.add_node(n, **attr)
-                else:
-                    dag.nodes[n].update(attr)
-            for u, w, attr in sub_view.edges(data=True):
-                if not dag.has_edge(u, w):
-                    dag.add_edge(u, w, **attr)
+        return new_subs
 
     # ---------- gnp mode (Task 4) ----------
 
