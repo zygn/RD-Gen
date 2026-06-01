@@ -28,7 +28,10 @@ class BranchingAugmentor:
                 work.nodes[n].setdefault("node_type", "regular")
             if layout_hint == "chain":
                 result = self._augment_chain(work, current_depth=0)
-            elif layout_hint == "gnp":
+            elif layout_hint in ("gnp", "fanin"):
+                # Per the "1 logical node" framing in the paper, the augmentation
+                # is orthogonal to the host construction method, so Fan-in/Fan-out
+                # shares the gnp node-replacement strategy.
                 result = self._augment_gnp(work, current_depth=0,
                                            initial_size=work.number_of_nodes())
             else:
@@ -89,20 +92,20 @@ class BranchingAugmentor:
 
     def _replace_node_with_branches(self, dag: nx.DiGraph, v: int, k: int,
                                     L_sub: int) -> list:
-        """Replace v with [C_src, sub_seq_1..k, C_snk] in place.
+        """Replace v with [v_ent, sub_seq_1..k, v_ext] in place.
         Returns the list of newly added regular sub-nodes (for next-depth processing)."""
         unit_id = self._take_unit_id()
-        csrc = self._take_node_id()
-        csnk = self._take_node_id()
-        dag.add_node(csrc, node_type="C_src", branch_unit_id=unit_id, execution_time=0)
-        dag.add_node(csnk, node_type="C_snk", branch_unit_id=unit_id, execution_time=0)
+        vent = self._take_node_id()
+        vext = self._take_node_id()
+        dag.add_node(vent, node_type="v_ent", branch_unit_id=unit_id, execution_time=0)
+        dag.add_node(vext, node_type="v_ext", branch_unit_id=unit_id, execution_time=0)
         in_edges = [(p, dict(dag.edges[p, v])) for p in dag.predecessors(v)]
         succs = list(dag.successors(v))
         dag.remove_node(v)
         for p, edge_attrs in in_edges:
-            dag.add_edge(p, csrc, **edge_attrs)
+            dag.add_edge(p, vent, **edge_attrs)
         for s in succs:
-            dag.add_edge(csnk, s)
+            dag.add_edge(vext, s)
         probs = self._sample_categorical(k)
         new_subs = []
         for j in range(k):
@@ -115,8 +118,8 @@ class BranchingAugmentor:
             attrs = {"branch_id": j}
             if self._config.firing == "probabilistic":
                 attrs["firing_prob"] = float(probs[j])
-            dag.add_edge(csrc, sub_nodes[0], **attrs)
-            dag.add_edge(sub_nodes[-1], csnk)
+            dag.add_edge(vent, sub_nodes[0], **attrs)
+            dag.add_edge(sub_nodes[-1], vext)
         return new_subs
 
     # ---------- gnp mode (Task 4) ----------
@@ -157,21 +160,21 @@ class BranchingAugmentor:
 
     def _replace_node_with_gnp_branches(self, dag: nx.DiGraph, v: int, k: int,
                                          n_sub: int) -> list:
-        """Replace v with [C_src, sub_DAG_1..k via branch heads, C_snk] in place.
+        """Replace v with [v_ent, sub_DAG_1..k via branch heads, v_ext] in place.
         Returns the list of newly added regular sub-nodes (branch heads + interior)."""
         unit_id = self._take_unit_id()
-        csrc = self._take_node_id()
-        csnk = self._take_node_id()
-        dag.add_node(csrc, node_type="C_src", branch_unit_id=unit_id, execution_time=0)
-        dag.add_node(csnk, node_type="C_snk", branch_unit_id=unit_id, execution_time=0)
+        vent = self._take_node_id()
+        vext = self._take_node_id()
+        dag.add_node(vent, node_type="v_ent", branch_unit_id=unit_id, execution_time=0)
+        dag.add_node(vext, node_type="v_ext", branch_unit_id=unit_id, execution_time=0)
         # Preserve in-edge / out-edge attributes
         in_edges = [(p, dict(dag.edges[p, v])) for p in dag.predecessors(v)]
         out_edges = [(s, dict(dag.edges[v, s])) for s in dag.successors(v)]
         dag.remove_node(v)
         for p, attrs in in_edges:
-            dag.add_edge(p, csrc, **attrs)
+            dag.add_edge(p, vent, **attrs)
         for s, attrs in out_edges:
-            dag.add_edge(csnk, s, **attrs)
+            dag.add_edge(vext, s, **attrs)
 
         probs = self._sample_categorical(k)
         edge_prob = (Util.random_choice(self._config.probability_of_edge_existence)
@@ -181,8 +184,8 @@ class BranchingAugmentor:
         new_subs = []
         for j in range(k):
             # Each branch gets its own internal Erdős-Rényi mini-DAG of n_sub nodes,
-            # plus a "branch head" node that receives the C_src -> head edge with
-            # branch_id/firing_prob attributes (single edge from C_src per branch,
+            # plus a "branch head" node that receives the v_ent -> head edge with
+            # branch_id/firing_prob attributes (single edge from v_ent per branch,
             # required for clean branch_id semantics).
             head_id = self._take_node_id()
             dag.add_node(head_id, node_type="regular", execution_time=0)
@@ -208,11 +211,11 @@ class BranchingAugmentor:
             attrs = {"branch_id": j}
             if self._config.firing == "probabilistic":
                 attrs["firing_prob"] = float(probs[j])
-            dag.add_edge(csrc, head_id, **attrs)
+            dag.add_edge(vent, head_id, **attrs)
             for src in sources:
                 dag.add_edge(head_id, src)
             for sink in sinks:
-                dag.add_edge(sink, csnk)
+                dag.add_edge(sink, vext)
         return new_subs
 
     # ---------- common ----------

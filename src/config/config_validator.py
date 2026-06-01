@@ -266,6 +266,7 @@ class ConfigValidator:
         if Util.ambiguous_equals(gm, "fan-in/fan-out"):
             self.fifo_gnp_common_schema.validate(self._config_raw)
             self.fan_in_fan_out_schema.validate(self._config_raw)
+            self.branching_schema.validate(self._config_raw)
         elif Util.ambiguous_equals(gm, "g(n, p)"):
             self.fifo_gnp_common_schema.validate(self._config_raw)
             self.g_n_p_schema.validate(self._config_raw)

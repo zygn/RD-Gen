@@ -39,7 +39,7 @@ class DAGBuilderFactory:
         gm = config.generation_method
         if Util.ambiguous_equals(gm, "fan-in/fan-out"):
             base = FanInFanOutBuilder(config)
-            hint = None
+            hint = "fanin"
         elif Util.ambiguous_equals(gm, "g(n, p)"):
             base = GNPBuilder(config)
             hint = "gnp"

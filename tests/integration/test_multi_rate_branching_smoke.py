@@ -60,7 +60,7 @@ def test_multi_rate_chain_with_branching_completes(tmp_path):
                 found = True
                 with open(os.path.join(root, fn)) as f:
                     d = yaml.safe_load(f)
-                # Must include at least one C_src node
+                # Must include at least one v_ent node
                 node_types = [n.get("node_type", "regular") for n in d["nodes"]]
-                assert "C_src" in node_types
+                assert "v_ent" in node_types
     assert found

@@ -47,15 +47,15 @@ def _chain_dag(n=5):
     return g
 
 
-def test_chain_augment_creates_c_src_c_snk_pairs():
+def test_chain_augment_creates_v_ent_v_ext_pairs():
     random.seed(42)
     cfg = _chain_config(prob_b=1.0, max_depth=1, max_branches=2)
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_chain_dag(5), layout_hint="chain")
-    csrcs = [n for n, a in g.nodes(data=True) if a.get("node_type") == "C_src"]
-    csnks = [n for n, a in g.nodes(data=True) if a.get("node_type") == "C_snk"]
-    assert len(csrcs) >= 1
-    assert len(csrcs) == len(csnks)
+    vents = [n for n, a in g.nodes(data=True) if a.get("node_type") == "v_ent"]
+    vexts = [n for n, a in g.nodes(data=True) if a.get("node_type") == "v_ext"]
+    assert len(vents) >= 1
+    assert len(vents) == len(vexts)
     BranchingValidator.assert_valid(g, "probabilistic")
 
 
@@ -74,7 +74,7 @@ def test_chain_augment_firing_prob_sums_to_one():
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_chain_dag(6), layout_hint="chain")
     for n, a in g.nodes(data=True):
-        if a.get("node_type") != "C_src":
+        if a.get("node_type") != "v_ent":
             continue
         out_probs = [d["firing_prob"] for _, _, d in g.out_edges(n, data=True)]
         assert abs(sum(out_probs) - 1.0) < 1e-9
@@ -86,25 +86,25 @@ def test_chain_augment_deterministic_omits_firing_prob():
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_chain_dag(5), layout_hint="chain")
     for n, a in g.nodes(data=True):
-        if a.get("node_type") != "C_src":
+        if a.get("node_type") != "v_ent":
             continue
         for _, _, d in g.out_edges(n, data=True):
             assert "firing_prob" not in d
             assert "branch_id" in d
 
 
-def test_chain_augment_c_src_c_snk_have_zero_exec_time():
+def test_chain_augment_v_ent_v_ext_have_zero_exec_time():
     random.seed(42)
     cfg = _chain_config(prob_b=1.0, max_depth=1, max_branches=2)
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_chain_dag(5), layout_hint="chain")
     for n, a in g.nodes(data=True):
-        if a.get("node_type") in ("C_src", "C_snk"):
+        if a.get("node_type") in ("v_ent", "v_ext"):
             assert a.get("execution_time") == 0
 
 
 def test_chain_augment_no_orphan_sources_at_depth_two():
-    """Regression: max_depth>=2 must not leave orphan inner C_src nodes
+    """Regression: max_depth>=2 must not leave orphan inner v_ent nodes
     (the original merge-back bug created 18 sources where 1 was expected)."""
     random.seed(42)
     cfg = _chain_config(prob_b=1.0, max_depth=2, max_branches=3)
@@ -112,14 +112,14 @@ def test_chain_augment_no_orphan_sources_at_depth_two():
     g = aug.augment(_chain_dag(5), layout_hint="chain")
     sources = [n for n in g.nodes() if g.in_degree(n) == 0]
     assert len(sources) == 1, f"expected 1 source node, got {len(sources)}: {sources}"
-    # Inner C_src nodes (those that are not the unique DAG source) must have a predecessor.
-    # The single DAG source may legitimately be a C_src when it replaces the chain root.
+    # Inner v_ent nodes (those that are not the unique DAG source) must have a predecessor.
+    # The single DAG source may legitimately be a v_ent when it replaces the chain root.
     dag_source = sources[0]
     for n in g.nodes():
         if n == dag_source:
             continue
-        if g.nodes[n].get("node_type") == "C_src" and g.in_degree(n) == 0:
-            raise AssertionError(f"orphan inner C_src found: {n}")
+        if g.nodes[n].get("node_type") == "v_ent" and g.in_degree(n) == 0:
+            raise AssertionError(f"orphan inner v_ent found: {n}")
 
 
 def _gnp_dag(n=8, p=0.3, seed=0):
@@ -134,17 +134,17 @@ def _gnp_dag(n=8, p=0.3, seed=0):
     return g
 
 
-def test_gnp_augment_creates_c_src_c_snk_pairs():
+def test_gnp_augment_creates_v_ent_v_ext_pairs():
     random.seed(42)
     cfg = _chain_config(prob_b=1.0, max_depth=1, max_branches=2)
     # NOTE: Branching subsection is layout-agnostic; reusing _chain_config
     cfg.graph_structure["Probability of edge existence"] = 0.3
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_gnp_dag(n=6, p=0.5, seed=1), layout_hint="gnp")
-    csrcs = [n for n, a in g.nodes(data=True) if a.get("node_type") == "C_src"]
-    csnks = [n for n, a in g.nodes(data=True) if a.get("node_type") == "C_snk"]
-    assert len(csrcs) >= 1
-    assert len(csrcs) == len(csnks)
+    vents = [n for n, a in g.nodes(data=True) if a.get("node_type") == "v_ent"]
+    vexts = [n for n, a in g.nodes(data=True) if a.get("node_type") == "v_ext"]
+    assert len(vents) >= 1
+    assert len(vents) == len(vexts)
     BranchingValidator.assert_valid(g, "probabilistic")
 
 
@@ -155,7 +155,7 @@ def test_gnp_augment_firing_prob_sums_to_one():
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_gnp_dag(n=8, p=0.4, seed=2), layout_hint="gnp")
     for n, a in g.nodes(data=True):
-        if a.get("node_type") != "C_src":
+        if a.get("node_type") != "v_ent":
             continue
         out_probs = [d["firing_prob"] for _, _, d in g.out_edges(n, data=True)]
         assert abs(sum(out_probs) - 1.0) < 1e-9
@@ -173,14 +173,14 @@ def test_gnp_augment_dirichlet_distribution():
 
 
 def test_gnp_augment_no_orphan_sources_at_depth_two():
-    """Regression: gnp mode at depth>=2 must not produce orphan C_src nodes."""
+    """Regression: gnp mode at depth>=2 must not produce orphan v_ent nodes."""
     random.seed(42)
     cfg = _chain_config(prob_b=1.0, max_depth=2, max_branches=3)
     cfg.graph_structure["Probability of edge existence"] = 0.3
     aug = BranchingAugmentor(cfg)
     g = aug.augment(_gnp_dag(n=6, p=0.3, seed=4), layout_hint="gnp")
     for n in g.nodes():
-        if g.nodes[n].get("node_type") == "C_src":
+        if g.nodes[n].get("node_type") == "v_ent":
             assert g.in_degree(n) >= 1 or n == min(g.nodes()), \
-                f"orphan C_src found: {n}"
+                f"orphan v_ent found: {n}"
     BranchingValidator.assert_valid(g, "probabilistic")

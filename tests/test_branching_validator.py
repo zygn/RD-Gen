@@ -8,10 +8,10 @@ def _make_valid_pdag():
     """A minimal valid pDAG with one branching unit (k=2)."""
     g = nx.DiGraph()
     g.add_node(0, node_type="regular", execution_time=10)
-    g.add_node(1, node_type="C_src", branch_unit_id=0, execution_time=0)
+    g.add_node(1, node_type="v_ent", branch_unit_id=0, execution_time=0)
     g.add_node(2, node_type="regular", execution_time=5)
     g.add_node(3, node_type="regular", execution_time=7)
-    g.add_node(4, node_type="C_snk", branch_unit_id=0, execution_time=0)
+    g.add_node(4, node_type="v_ext", branch_unit_id=0, execution_time=0)
     g.add_edge(0, 1)
     g.add_edge(1, 2, branch_id=0, firing_prob=0.6)
     g.add_edge(1, 3, branch_id=1, firing_prob=0.4)
@@ -49,9 +49,9 @@ def test_branch_vertex_overlap_is_rejected():
         BranchingValidator.assert_valid(g, "probabilistic")
 
 
-def test_missing_c_snk_pair_is_rejected():
+def test_missing_v_ext_pair_is_rejected():
     g = _make_valid_pdag()
-    # delete C_snk to break the pair
+    # delete v_ext to break the pair
     g.remove_node(4)
     with pytest.raises(BranchingConstraintError):
         BranchingValidator.assert_valid(g, "probabilistic")
@@ -73,7 +73,7 @@ def test_missing_branch_id_is_rejected():
 
 
 def test_no_branching_dag_passes_trivially():
-    """DAG with no C_src/C_snk should be valid in both firing modes."""
+    """DAG with no v_ent/v_ext should be valid in both firing modes."""
     g = nx.DiGraph()
     g.add_node(0, node_type="regular", execution_time=10)
     g.add_node(1, node_type="regular", execution_time=10)
